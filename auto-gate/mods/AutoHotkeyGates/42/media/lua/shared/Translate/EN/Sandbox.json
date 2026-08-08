@@ -20,7 +20,7 @@
   "Sandbox_AHG_RelockOnClose_tooltip": "When a locked gate was opened via lock bypass, restore its lock as soon as it closes again.",
 
   "Sandbox_AHG_AutoCloseSeconds": "Auto-Close Delay (seconds)",
-  "Sandbox_AHG_AutoCloseSeconds_tooltip": "Automatically close registered gates this many seconds after they were opened by the mod. 0 disables auto-close.",
+  "Sandbox_AHG_AutoCloseSeconds_tooltip": "Automatically close registered gates this many seconds after they open - whether by hotkey/radial or by the vanilla E interact. 0 disables auto-close.",
 
   "Sandbox_AHG_AutoCloseSafetyCheck": "Auto-Close Safety Check",
   "Sandbox_AHG_AutoCloseSafetyCheck_tooltip": "Never auto-close a gate while a player, zombie, or vehicle is in the gateway. The close attempt is retried a few seconds later.",

@@ -286,6 +286,7 @@ function SAHGSystem:removeGateRecord(record, reason)
     if gateId then
         if self.pendingRemovalChecks then self.pendingRemovalChecks[gateId] = nil end
         if self.autoClose then self.autoClose[gateId] = nil end
+        if self.openWatch then self.openWatch[gateId] = nil end
     end
     AHG.noise("removed gateId=" .. tostring(gateId) .. " reason=" .. tostring(reason) .. " cleared=" .. tostring(cleared))
     return true
@@ -296,50 +297,87 @@ end
 -- ---------------------------------------------------------------------------
 
 -- Toggle a multi-tile gate safely.
--- Double doors / garage doors auto-sync partner pieces when one is toggled.
--- Toggling every mismatched piece in one pass double-fires and leaves the
--- assembly stuck; judge success by final group state instead.
+-- Use ToggleDoor(player) like vanilla ISOpenCloseDoor / GateMotor so the open
+-- state is networked. ToggleDoorSilent flips IsOpen without client sync, which
+-- made the fob report "opening/closing" while the gate stayed visually shut.
+-- Double doors / garage doors usually sync partners from one ToggleDoor call;
+-- a second pass catches leftover pieces on non-synced assemblies.
 function SAHGSystem:togglePiece(piece, playerObj)
     if not piece then return false end
-    local ok = pcall(function()
-        -- Prefer silent toggle for remote fob use (no adjacency / interaction checks).
-        if piece.ToggleDoorSilent then
-            piece:ToggleDoorSilent()
-        elseif playerObj then
+    local before = AHG.isOpen(piece)
+    local usedSilent = false
+
+    -- 1) Vanilla networked path (same as ISOpenCloseDoor.complete on the server).
+    pcall(function()
+        if playerObj and piece.ToggleDoor then
             piece:ToggleDoor(playerObj)
-        else
-            piece:ToggleDoor(nil)
         end
     end)
-    return ok == true
+
+    if AHG.isOpen(piece) == before then
+        -- 2) ToggleDoor often refuses when the player is far / in a vehicle.
+        -- Silent flips the authoritative open flag; we then force sprite sync.
+        usedSilent = true
+        pcall(function()
+            if piece.ToggleDoorSilent then
+                piece:ToggleDoorSilent()
+            elseif piece.ToggleDoor then
+                piece:ToggleDoor(nil)
+            end
+        end)
+    end
+
+    AHG.syncPiece(piece)
+
+    local after = AHG.isOpen(piece)
+    AHG.noise("togglePiece silent=" .. tostring(usedSilent)
+        .. " before=" .. tostring(before) .. " after=" .. tostring(after)
+        .. " @ " .. tostring(piece:getX()) .. "," .. tostring(piece:getY()))
+    return after ~= before
 end
 
 function SAHGSystem:toggleGroup(group, playerObj, targetOpen)
     if not group or #group == 0 then return 0 end
-    if AHG.isGroupOpen(group) == targetOpen then return 1 end
+    if AHG.isGroupOpen(group) == targetOpen then
+        AHG.noise("toggleGroup already at targetOpen=" .. tostring(targetOpen))
+        return 1
+    end
 
-    -- First pass: toggle one closed/open mismatch and let the engine sync partners.
+    local toggled = false
+
+    -- First pass: toggle one mismatched piece; engine usually moves the whole group.
     for i = 1, #group do
         local piece = group[i]
         if piece and AHG.isOpen(piece) ~= targetOpen then
-            self:togglePiece(piece, playerObj)
+            if self:togglePiece(piece, playerObj) then
+                toggled = true
+            end
             break
         end
     end
 
-    -- Second pass: only pieces that still disagree (non-synced assemblies).
+    -- Second pass: leftover pieces that did not sync with the first toggle.
     if AHG.isGroupOpen(group) ~= targetOpen then
         for i = 1, #group do
             local piece = group[i]
             if piece and AHG.isOpen(piece) ~= targetOpen then
-                self:togglePiece(piece, playerObj)
+                if self:togglePiece(piece, playerObj) then
+                    toggled = true
+                end
             end
         end
     end
 
-    if AHG.isGroupOpen(group) == targetOpen then
-        return 1
+    -- Sync the full group so clients see every panel.
+    for i = 1, #group do
+        AHG.syncPiece(group[i])
     end
+
+    local success = AHG.isGroupOpen(group) == targetOpen
+    AHG.noise("toggleGroup targetOpen=" .. tostring(targetOpen)
+        .. " success=" .. tostring(success) .. " toggled=" .. tostring(toggled)
+        .. " pieces=" .. tostring(#group))
+    if success then return 1 end
     return 0
 end
 
@@ -486,7 +524,7 @@ function SAHGSystem:armAutoClose(record)
     local secs = tonumber(AHG.opt("AutoCloseSeconds")) or 0
     if secs <= 0 or not record or not record.gateId then return end
     self.autoClose = self.autoClose or {}
-    self.autoClose[record.gateId] = getTimestampMs() + secs * 1000
+    self.autoClose[record.gateId] = AHG.nowMs() + secs * 1000
     AHG.noise("auto-close armed gateId=" .. tostring(record.gateId) .. " in " .. tostring(secs) .. "s")
 end
 
@@ -534,10 +572,48 @@ function SAHGSystem:isGateBlocked(group)
     return blocked
 end
 
+-- Watch registered gates for open/close transitions from ANY source
+-- (mod hotkey, vanilla E interact, other mods). Arms auto-close when a
+-- gate becomes open and no timer is already running; disarms when closed.
+function SAHGSystem:watchManualOpens()
+    local secs = tonumber(AHG.opt("AutoCloseSeconds")) or 0
+    if secs <= 0 then return end
+
+    self.openWatch = self.openWatch or {}
+    self.autoClose = self.autoClose or {}
+
+    for i = 1, self:getLuaObjectCount() do
+        local record = self:getLuaObjectByIndex(i)
+        if record and record.gateId and record.gateId ~= "" then
+            local gateObj = self:resolveGateObject(record)
+            if gateObj then
+                local isOpen = AHG.isGroupOpen(AHG.getGateGroup(gateObj))
+                local wasOpen = self.openWatch[record.gateId] == true
+
+                if isOpen and not wasOpen then
+                    if not self.autoClose[record.gateId] then
+                        self:armAutoClose(record)
+                        AHG.noise("auto-close armed from open-watch (manual/E/other) gateId="
+                            .. tostring(record.gateId))
+                    end
+                elseif (not isOpen) and wasOpen then
+                    if self.autoClose[record.gateId] then
+                        self:disarmAutoClose(record.gateId)
+                        AHG.noise("auto-close disarmed; gate closed externally gateId="
+                            .. tostring(record.gateId))
+                    end
+                end
+
+                self.openWatch[record.gateId] = isOpen
+            end
+        end
+    end
+end
+
 function SAHGSystem:processAutoClose()
     -- NOTE: Kahlua does not expose the global `next`; use nil guards + pairs only.
     if not self.autoClose then return end
-    local now = getTimestampMs()
+    local now = AHG.nowMs()
 
     for gateId, closeAt in pairs(self.autoClose) do
         if now >= closeAt then
@@ -554,6 +630,7 @@ function SAHGSystem:processAutoClose()
                     if not AHG.isGroupOpen(group) then
                         -- Already closed (manual / other); still finish lock+marker cleanup.
                         self:finishClose(record, group, gateObj)
+                        if self.openWatch then self.openWatch[gateId] = false end
                         AHG.noise("auto-close skipped; already closed gateId=" .. tostring(gateId))
                     elseif AHG.opt("AutoCloseSafetyCheck") and self:isGateBlocked(group) then
                         self.autoClose[gateId] = now + AUTOCLOSE_RETRY_MS
@@ -561,6 +638,7 @@ function SAHGSystem:processAutoClose()
                     else
                         if self:toggleGroup(group, nil, false) > 0 then
                             self:finishClose(record, group, gateObj)
+                            if self.openWatch then self.openWatch[gateId] = false end
                             AHG.noise("auto-closed gateId=" .. tostring(gateId))
                         else
                             -- Retry shortly instead of giving up permanently.
@@ -639,6 +717,8 @@ local function AHG_ServerOnTick()
     -- spam the bottom-right error counter every frame forever.
     local ok, err = pcall(function() instance:processPendingRemovalChecks() end)
     if not ok then print("[AHG] ERROR in processPendingRemovalChecks: " .. tostring(err)) end
+    ok, err = pcall(function() instance:watchManualOpens() end)
+    if not ok then print("[AHG] ERROR in watchManualOpens: " .. tostring(err)) end
     ok, err = pcall(function() instance:processAutoClose() end)
     if not ok then print("[AHG] ERROR in processAutoClose: " .. tostring(err)) end
 end

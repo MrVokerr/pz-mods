@@ -60,11 +60,18 @@ end
 -- ---------------------------------------------------------------------------
 
 function AHG.sendCommand(playerObj, command, args)
+    args = args or {}
+    -- Connected client / listen-server host UI: go over the network.
     if isClient() then
-        sendClientCommand(playerObj, AHG.Module, command, args or {})
-    elseif AHG.ServerHandle then
-        -- Singleplayer: server lua is loaded in-process, dispatch directly.
-        AHG.ServerHandle(command, playerObj, args or {})
+        sendClientCommand(playerObj, AHG.Module, command, args)
+        return
+    end
+    -- Pure singleplayer (isClient and isServer both false): call server handler
+    -- directly in-process. Dedicated-server process never runs this path.
+    if AHG.ServerHandle then
+        AHG.ServerHandle(command, playerObj, args)
+    else
+        print("[AHG] ERROR: ServerHandle missing for command " .. tostring(command))
     end
 end
 
@@ -198,7 +205,10 @@ end
 
 -- ---------------------------------------------------------------------------
 -- Gate group detection (multi-tile gates / garage doors)
--- Uses IsoDoor java statics directly so it works on both client and server.
+-- IMPORTANT (B42): IsoDoor.getDoubleDoorObject(obj, i) throws
+-- ArrayIndexOutOfBoundsException when obj is NOT a double-door piece.
+-- Always guard with getDoubleDoorIndex / getGarageDoorIndex first.
+-- Do not call buildUtil.getDoubleDoorObjects on arbitrary doors.
 -- ---------------------------------------------------------------------------
 
 local function appendUnique(list, candidate)
@@ -209,49 +219,55 @@ local function appendUnique(list, candidate)
     table.insert(list, candidate)
 end
 
+function AHG.getDoubleDoorIndexSafe(obj)
+    local idx = -1
+    if not obj or not IsoDoor or not IsoDoor.getDoubleDoorIndex then return -1 end
+    pcall(function() idx = IsoDoor.getDoubleDoorIndex(obj) end)
+    if type(idx) ~= "number" then return -1 end
+    return idx
+end
+
+function AHG.getGarageDoorIndexSafe(obj)
+    local idx = -1
+    if not obj or not IsoDoor or not IsoDoor.getGarageDoorIndex then return -1 end
+    pcall(function() idx = IsoDoor.getGarageDoorIndex(obj) end)
+    if type(idx) ~= "number" then return -1 end
+    return idx
+end
+
 function AHG.getGateGroup(obj)
     local result = {}
     if not AHG.isDoorLike(obj) then return result end
     table.insert(result, obj)
 
-    -- Prefer vanilla buildUtil helpers when present (ISBuildUtil / AdminContextMenu).
-    if buildUtil and buildUtil.getDoubleDoorObjects and buildUtil.getGarageDoorObjects then
-        pcall(function()
-            local doubles = buildUtil.getDoubleDoorObjects(obj)
-            for i = 1, #doubles do
-                appendUnique(result, doubles[i])
-            end
-        end)
-        pcall(function()
-            local garage = buildUtil.getGarageDoorObjects(obj)
-            for i = 1, #garage do
-                appendUnique(result, garage[i])
-            end
-        end)
-        return result
+    -- Double doors / double gates (indices 1..4 only).
+    if AHG.getDoubleDoorIndexSafe(obj) ~= -1 then
+        for i = 1, 4 do
+            local piece = nil
+            pcall(function() piece = IsoDoor.getDoubleDoorObject(obj, i) end)
+            appendUnique(result, piece)
+        end
     end
 
-    -- Fallback: IsoDoor Java statics (same implementation buildUtil wraps).
-    pcall(function()
-        for i = 1, 4 do
-            appendUnique(result, IsoDoor.getDoubleDoorObject(obj, i))
+    -- Garage door segments.
+    if AHG.getGarageDoorIndexSafe(obj) ~= -1 then
+        local prev = nil
+        pcall(function() prev = IsoDoor.getGarageDoorPrev(obj) end)
+        while prev do
+            appendUnique(result, prev)
+            local nextPrev = nil
+            pcall(function() nextPrev = IsoDoor.getGarageDoorPrev(prev) end)
+            prev = nextPrev
         end
-    end)
-
-    pcall(function()
-        if IsoDoor.getGarageDoorIndex(obj) ~= -1 then
-            local prev = IsoDoor.getGarageDoorPrev(obj)
-            while prev do
-                appendUnique(result, prev)
-                prev = IsoDoor.getGarageDoorPrev(prev)
-            end
-            local nxt = IsoDoor.getGarageDoorNext(obj)
-            while nxt do
-                appendUnique(result, nxt)
-                nxt = IsoDoor.getGarageDoorNext(nxt)
-            end
+        local nxt = nil
+        pcall(function() nxt = IsoDoor.getGarageDoorNext(obj) end)
+        while nxt do
+            appendUnique(result, nxt)
+            local nextNxt = nil
+            pcall(function() nextNxt = IsoDoor.getGarageDoorNext(nxt) end)
+            nxt = nextNxt
         end
-    end)
+    end
 
     return result
 end
@@ -260,8 +276,8 @@ end
 -- double gates, double doors and garage doors.
 function AHG.isVehicleGate(obj)
     if not AHG.isDoorLike(obj) then return false end
-    local ok, garage = pcall(function() return IsoDoor.getGarageDoorIndex(obj) ~= -1 end)
-    if ok and garage then return true end
+    if AHG.getGarageDoorIndexSafe(obj) ~= -1 then return true end
+    if AHG.getDoubleDoorIndexSafe(obj) ~= -1 then return true end
     return #AHG.getGateGroup(obj) >= 2
 end
 
@@ -435,12 +451,33 @@ function AHG.setPieceLocks(obj, key, iso, pad)
     pcall(function() if obj.setLockedByPadlock then obj:setLockedByPadlock(pad) end end)
 end
 
--- Sync lock/state changes to clients (vanilla ISLockDoor B42 pattern).
+-- Sync lock / open-state / sprite to clients after a remote toggle.
+-- B42: ToggleDoor usually networks itself; ToggleDoorSilent does not, so we
+-- must push sprite + iso state when the silent path was used.
 function AHG.syncPiece(obj)
     if not obj then return end
     pcall(function()
+        if instanceof(obj, "IsoThumpable") and obj.sync then
+            obj:sync()
+        end
         if obj.syncIsoObject then
             obj:syncIsoObject(false, 0, nil, nil)
         end
+        if isServer() and obj.transmitUpdatedSpriteToClients then
+            obj:transmitUpdatedSpriteToClients()
+        end
     end)
+end
+
+-- Timestamp helper (B42+). Falls back to wall-clock ms via getTimeInMillis.
+function AHG.nowMs()
+    if getTimestampMs then
+        local ok, t = pcall(getTimestampMs)
+        if ok and t then return t end
+    end
+    if getTimeInMillis then
+        local ok, t = pcall(getTimeInMillis)
+        if ok and t then return t end
+    end
+    return 0
 end

@@ -5,4 +5,4 @@ description=
 description=Register gates as staff via right-click. Bind the key under Options > Key Bindings > Automatic Hotkey Gates. Configure everything via sandbox options.
 tags=Build 42,Multiplayer,QoL,Interface
 versionMin=42.20
-modversion=1.0.0
+modversion=1.0.1

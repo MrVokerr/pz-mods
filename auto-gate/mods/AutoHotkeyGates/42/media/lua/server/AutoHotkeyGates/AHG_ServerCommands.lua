@@ -143,7 +143,7 @@ function Commands.Trigger(playerObj, args)
     local cooldownMs = (tonumber(AHG.opt("CooldownSeconds")) or 0) * 1000
     if cooldownMs > 0 then
         local username = playerObj:getUsername() or "?"
-        local now = getTimestampMs()
+        local now = AHG.nowMs()
         local last = lastTrigger[username]
         if last and (now - last) < cooldownMs then
             AHG.noise("trigger ignored (cooldown) user=" .. username)

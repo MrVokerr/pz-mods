@@ -52,3 +52,5 @@ __pycache__/
 # Accidental source-art dumps
 *.psd
 *.xcf
+
+# Keep empty B42 stub dirs (AnimSets / actiongroups) via .keep files — do not ignore them

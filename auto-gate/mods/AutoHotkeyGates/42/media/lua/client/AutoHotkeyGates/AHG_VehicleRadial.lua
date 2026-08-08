@@ -69,6 +69,20 @@ local function wrapVehicleRadial()
         return res
     end
 
+    -- Outside radial (standing next to a vehicle) - optional; only when seated
+    -- does addGateSlice actually inject, so this is a cheap no-op otherwise.
+    if ISVehicleMenu.showRadialMenuOutside then
+        local origOutside = ISVehicleMenu.showRadialMenuOutside
+        ISVehicleMenu.showRadialMenuOutside = function(playerObj, ...)
+            local res = nil
+            if origOutside then
+                res = origOutside(playerObj, ...)
+            end
+            pcall(addGateSlice, playerObj)
+            return res
+        end
+    end
+
     ISVehicleMenu.__AHGWrapped = true
 end
 
