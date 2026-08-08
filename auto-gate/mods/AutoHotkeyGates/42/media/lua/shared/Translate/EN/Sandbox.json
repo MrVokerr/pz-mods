@@ -1,0 +1,55 @@
+{
+  "Sandbox_AHG": "Automatic Hotkey Gates",
+
+  "Sandbox_AHG_TriggerRange": "Trigger Range (tiles)",
+  "Sandbox_AHG_TriggerRange_tooltip": "Maximum distance at which the hotkey, radial menu, or context menu can operate a registered gate. Like a key fob: close range, not across the map.",
+
+  "Sandbox_AHG_CooldownSeconds": "Trigger Cooldown (seconds)",
+  "Sandbox_AHG_CooldownSeconds_tooltip": "Per-player delay between gate triggers. Prevents key spam from flickering gates. 0 disables the cooldown.",
+
+  "Sandbox_AHG_RequireVehicleGates": "Vehicle Gates Only",
+  "Sandbox_AHG_RequireVehicleGates_tooltip": "When enabled, only multi-tile vehicle gates and garage doors can be registered as automatic gates. Disable to allow registering any door.",
+
+  "Sandbox_AHG_OperateFromVehicleOnly": "Operate From Vehicle Only",
+  "Sandbox_AHG_OperateFromVehicleOnly_tooltip": "When enabled, the hotkey and radial menu only work while seated in a vehicle (strict key-fob roleplay). The right-click option on the gate still works on foot.",
+
+  "Sandbox_AHG_BypassLocks": "Bypass Locks",
+  "Sandbox_AHG_BypassLocks_tooltip": "When enabled, triggering a registered gate opens it even if it is locked or padlocked - the fob is the authorization. When disabled, locked gates refuse to open.",
+
+  "Sandbox_AHG_RelockOnClose": "Re-lock On Close",
+  "Sandbox_AHG_RelockOnClose_tooltip": "When a locked gate was opened via lock bypass, restore its lock as soon as it closes again.",
+
+  "Sandbox_AHG_AutoCloseSeconds": "Auto-Close Delay (seconds)",
+  "Sandbox_AHG_AutoCloseSeconds_tooltip": "Automatically close registered gates this many seconds after they were opened by the mod. 0 disables auto-close.",
+
+  "Sandbox_AHG_AutoCloseSafetyCheck": "Auto-Close Safety Check",
+  "Sandbox_AHG_AutoCloseSafetyCheck_tooltip": "Never auto-close a gate while a player, zombie, or vehicle is in the gateway. The close attempt is retried a few seconds later.",
+
+  "Sandbox_AHG_MinAccessLevelToRegister": "Minimum Staff Level To Register",
+  "Sandbox_AHG_MinAccessLevelToRegister_tooltip": "The lowest staff access level allowed to register or unregister automatic gates.",
+  "Sandbox_AHG_AccessLevel_option1": "Admin only",
+  "Sandbox_AHG_AccessLevel_option2": "Moderator and above",
+  "Sandbox_AHG_AccessLevel_option3": "Overseer and above",
+  "Sandbox_AHG_AccessLevel_option4": "GM and above",
+
+  "Sandbox_AHG_MaxRegisteredGates": "Max Registered Gates",
+  "Sandbox_AHG_MaxRegisteredGates_tooltip": "Server-wide cap on the number of registered automatic gates. 0 means unlimited.",
+
+  "Sandbox_AHG_EnforcePermissionHook": "Enforce Permission Hook",
+  "Sandbox_AHG_EnforcePermissionHook_tooltip": "When enabled, tagged gates require membership in one of the listed vanilla factions (comma-separated names). Empty tags stay public. Admin/Moderator always bypass. Disable to let anyone operate all registered gates.",
+
+  "Sandbox_AHG_EnableHotkey": "Enable Hotkey",
+  "Sandbox_AHG_EnableHotkey_tooltip": "Allow operating registered gates with the Operate Gate keybind.",
+
+  "Sandbox_AHG_EnableVehicleRadial": "Enable Vehicle Radial Menu",
+  "Sandbox_AHG_EnableVehicleRadial_tooltip": "Show an Operate Gate slice in the vehicle radial menu when a registered gate is in range.",
+
+  "Sandbox_AHG_EnableContextMenu": "Enable Context Menu",
+  "Sandbox_AHG_EnableContextMenu_tooltip": "Show an Open/Close Gate option when right-clicking a registered gate.",
+
+  "Sandbox_AHG_ShowHaloMessages": "Show Feedback Messages",
+  "Sandbox_AHG_ShowHaloMessages_tooltip": "Show halo text feedback above the player (gate opened, out of range, access denied, and so on).",
+
+  "Sandbox_AHG_DebugLogging": "Debug Logging",
+  "Sandbox_AHG_DebugLogging_tooltip": "Print verbose [AHG] diagnostic lines to the console/server log. Useful when reporting problems."
+}

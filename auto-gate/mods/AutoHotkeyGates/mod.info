@@ -1,0 +1,8 @@
+id=AutoHotkeyGates
+name=Automatic / Hotkey Gates
+description=Staff designate vehicle gates as automatic; players near a registered gate open/close it key-fob style with a hotkey, vehicle radial menu, or right-click - including from inside a vehicle. Server-authoritative, built for dedicated MP servers.
+description=
+description=Register gates as staff via right-click. Bind the key under Options > Key Bindings > Automatic Hotkey Gates. Configure everything via sandbox options.
+tags=Build 42,Multiplayer,QoL,Interface
+versionMin=42.20
+modversion=1.0.0

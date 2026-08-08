@@ -1,0 +1,139 @@
+VERSION = 1,
+
+option AutoHotkeyGates.TriggerRange
+{
+    type = integer,
+    min = 1,
+    default = 7,
+    max = 60,
+    page = AHG,
+    translation = AHG_TriggerRange,
+}
+
+option AutoHotkeyGates.CooldownSeconds
+{
+    type = double,
+    min = 0.0,
+    default = 1.0,
+    max = 30.0,
+    page = AHG,
+    translation = AHG_CooldownSeconds,
+}
+
+option AutoHotkeyGates.RequireVehicleGates
+{
+    type = boolean,
+    default = true,
+    page = AHG,
+    translation = AHG_RequireVehicleGates,
+}
+
+option AutoHotkeyGates.OperateFromVehicleOnly
+{
+    type = boolean,
+    default = false,
+    page = AHG,
+    translation = AHG_OperateFromVehicleOnly,
+}
+
+option AutoHotkeyGates.BypassLocks
+{
+    type = boolean,
+    default = true,
+    page = AHG,
+    translation = AHG_BypassLocks,
+}
+
+option AutoHotkeyGates.RelockOnClose
+{
+    type = boolean,
+    default = true,
+    page = AHG,
+    translation = AHG_RelockOnClose,
+}
+
+option AutoHotkeyGates.AutoCloseSeconds
+{
+    type = integer,
+    min = 0,
+    default = 10,
+    max = 600,
+    page = AHG,
+    translation = AHG_AutoCloseSeconds,
+}
+
+option AutoHotkeyGates.AutoCloseSafetyCheck
+{
+    type = boolean,
+    default = true,
+    page = AHG,
+    translation = AHG_AutoCloseSafetyCheck,
+}
+
+option AutoHotkeyGates.MinAccessLevelToRegister
+{
+    type = enum,
+    numValues = 4,
+    default = 2,
+    page = AHG,
+    translation = AHG_MinAccessLevelToRegister,
+    valueTranslation = AHG_AccessLevel,
+}
+
+option AutoHotkeyGates.MaxRegisteredGates
+{
+    type = integer,
+    min = 0,
+    default = 0,
+    max = 1000,
+    page = AHG,
+    translation = AHG_MaxRegisteredGates,
+}
+
+option AutoHotkeyGates.EnforcePermissionHook
+{
+    type = boolean,
+    default = true,
+    page = AHG,
+    translation = AHG_EnforcePermissionHook,
+}
+
+option AutoHotkeyGates.EnableHotkey
+{
+    type = boolean,
+    default = true,
+    page = AHG,
+    translation = AHG_EnableHotkey,
+}
+
+option AutoHotkeyGates.EnableVehicleRadial
+{
+    type = boolean,
+    default = true,
+    page = AHG,
+    translation = AHG_EnableVehicleRadial,
+}
+
+option AutoHotkeyGates.EnableContextMenu
+{
+    type = boolean,
+    default = true,
+    page = AHG,
+    translation = AHG_EnableContextMenu,
+}
+
+option AutoHotkeyGates.ShowHaloMessages
+{
+    type = boolean,
+    default = true,
+    page = AHG,
+    translation = AHG_ShowHaloMessages,
+}
+
+option AutoHotkeyGates.DebugLogging
+{
+    type = boolean,
+    default = false,
+    page = AHG,
+    translation = AHG_DebugLogging,
+}

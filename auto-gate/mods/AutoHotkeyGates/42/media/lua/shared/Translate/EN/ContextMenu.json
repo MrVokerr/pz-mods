@@ -1,0 +1,12 @@
+{
+  "ContextMenu_AHG_Root": "Automatic Gate",
+  "ContextMenu_AHG_Register": "Register Automatic Gate...",
+  "ContextMenu_AHG_RegisterTooltip": "Turn this gate into an automatic gate. Tag = faction ACL: empty = public, one name, or comma-separated names (e.g. Police, Military). Admin/Moderator always bypass.",
+  "ContextMenu_AHG_RegisterNotEligible": "Only multi-tile vehicle gates and garage doors can be registered.",
+  "ContextMenu_AHG_Unregister": "Unregister Automatic Gate",
+  "ContextMenu_AHG_ChangeTag": "Change Tag...",
+  "ContextMenu_AHG_Operate": "Open/Close Gate",
+  "ContextMenu_AHG_InfoTag": "Automatic Gate: %1",
+  "ContextMenu_AHG_InfoNoTag": "Automatic Gate (public)",
+  "ContextMenu_AHG_EnterTag": "Faction ACL (optional; empty = public, e.g. Police or Police, Military):"
+}
