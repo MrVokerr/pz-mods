@@ -296,48 +296,40 @@ end
 -- Operate: open / close with lock bypass and restore
 -- ---------------------------------------------------------------------------
 
--- Toggle a multi-tile gate safely.
--- Use ToggleDoor(player) like vanilla ISOpenCloseDoor / GateMotor so the open
--- state is networked. ToggleDoorSilent flips IsOpen without client sync, which
--- made the fob report "opening/closing" while the gate stayed visually shut.
--- Double doors / garage doors usually sync partners from one ToggleDoor call;
--- a second pass catches leftover pieces on non-synced assemblies.
+-- Match GateMotor / HydeCo / ASG: call ToggleDoor once on a single canonical
+-- handle. Vanilla syncs the rest of a double-door / garage group from that.
+-- Do NOT ToggleDoorSilent every leftover leaf - that desyncs assemblies and
+-- can leave secondary pieces with a null sprite (which then permanently
+-- broke our earlier "refuse if any piece has no sprite" guard).
 function SAHGSystem:togglePiece(piece, playerObj)
-    if not piece then return false end
-    if not AHG.isSpriteValid(piece) then
-        -- operateGate already refuses whole-group operations on a corrupted
-        -- piece; this is a backstop for other callers (auto-close retries).
-        AHG.noise("togglePiece skipped: no sprite (corrupted) @ " .. tostring(piece:getX()) .. "," .. tostring(piece:getY()))
-        return false
-    end
-    local before = AHG.isOpen(piece)
-    local usedSilent = false
+    if not piece or not piece.ToggleDoor then return false end
 
-    -- 1) Vanilla networked path (same as ISOpenCloseDoor.complete on the server).
+    local before = AHG.isOpen(piece)
+    local actor = AHG.findActorForToggle(piece:getX(), piece:getY(), piece:getZ(), playerObj)
+
+    local ok = pcall(function()
+        piece:ToggleDoor(actor)
+    end)
+
+    local after = AHG.isOpen(piece)
+    if ok and after ~= before then
+        AHG.noise("togglePiece ok before=" .. tostring(before) .. " after=" .. tostring(after)
+            .. " @ " .. tostring(piece:getX()) .. "," .. tostring(piece:getY()))
+        return true
+    end
+
+    -- ToggleDoor can refuse when the actor is missing / too far (vehicle fob).
+    -- One silent flip on the SAME canonical piece only - never on every leaf.
     pcall(function()
-        if playerObj and piece.ToggleDoor then
-            piece:ToggleDoor(playerObj)
+        if piece.ToggleDoorSilent then
+            piece:ToggleDoorSilent()
+        elseif piece.ToggleDoor then
+            piece:ToggleDoor(nil)
         end
     end)
 
-    if AHG.isOpen(piece) == before then
-        -- 2) ToggleDoor often refuses when the player is far / in a vehicle.
-        -- Silent flips the authoritative open flag; we then force sprite sync.
-        usedSilent = true
-        pcall(function()
-            if piece.ToggleDoorSilent then
-                piece:ToggleDoorSilent()
-            elseif piece.ToggleDoor then
-                piece:ToggleDoor(nil)
-            end
-        end)
-    end
-
-    AHG.syncPiece(piece)
-
-    local after = AHG.isOpen(piece)
-    AHG.noise("togglePiece silent=" .. tostring(usedSilent)
-        .. " before=" .. tostring(before) .. " after=" .. tostring(after)
+    after = AHG.isOpen(piece)
+    AHG.noise("togglePiece silent-fallback before=" .. tostring(before) .. " after=" .. tostring(after)
         .. " @ " .. tostring(piece:getX()) .. "," .. tostring(piece:getY()))
     return after ~= before
 end
@@ -349,40 +341,19 @@ function SAHGSystem:toggleGroup(group, playerObj, targetOpen)
         return 1
     end
 
-    local toggled = false
+    local handle = AHG.getCanonicalGateHandle(group)
+    if not handle then return 0 end
 
-    -- First pass: toggle one mismatched piece; engine usually moves the whole group.
-    for i = 1, #group do
-        local piece = group[i]
-        if piece and AHG.isOpen(piece) ~= targetOpen then
-            if self:togglePiece(piece, playerObj) then
-                toggled = true
-            end
-            break
-        end
-    end
+    local toggled = self:togglePiece(handle, playerObj)
 
-    -- Second pass: leftover pieces that did not sync with the first toggle.
-    if AHG.isGroupOpen(group) ~= targetOpen then
-        for i = 1, #group do
-            local piece = group[i]
-            if piece and AHG.isOpen(piece) ~= targetOpen then
-                if self:togglePiece(piece, playerObj) then
-                    toggled = true
-                end
-            end
-        end
-    end
+    -- Re-walk partners from the handle; stale leaf refs can lie after ToggleDoor.
+    local fresh = AHG.getGateGroup(handle)
+    if not fresh or #fresh == 0 then fresh = group end
+    local success = AHG.isGroupOpen(fresh) == targetOpen
 
-    -- Sync the full group so clients see every panel.
-    for i = 1, #group do
-        AHG.syncPiece(group[i])
-    end
-
-    local success = AHG.isGroupOpen(group) == targetOpen
     AHG.noise("toggleGroup targetOpen=" .. tostring(targetOpen)
         .. " success=" .. tostring(success) .. " toggled=" .. tostring(toggled)
-        .. " pieces=" .. tostring(#group))
+        .. " pieces=" .. tostring(#fresh))
     if success then return 1 end
     return 0
 end
@@ -497,15 +468,6 @@ function SAHGSystem:operateGate(playerObj, record)
     end
 
     local group = AHG.getGateGroup(gateObj)
-
-    for i = 1, #group do
-        if not AHG.isSpriteValid(group[i]) then
-            AHG.noise("operateGate refused: corrupted piece (no sprite) gateId=" .. tostring(record.gateId)
-                .. " @ " .. tostring(group[i]:getX()) .. "," .. tostring(group[i]:getY()))
-            return false, "IGUI_AHG_GateCorrupted"
-        end
-    end
-
     local wantOpen = not AHG.isGroupOpen(group)
     local isGarage = AHG.isGarageGroup(group)
 
@@ -569,11 +531,14 @@ function SAHGSystem:isGateBlocked(group)
     local blocked = false
     pcall(function()
         local cell = getCell()
-        if not cell then return end
+        if not cell or not cell.getVehicles then return end
         local vehicles = cell:getVehicles()
-        if not vehicles then return end
-        for v = 0, vehicles:size() - 1 do
-            local vehicle = vehicles:get(v)
+        if not vehicles or not vehicles.size then return end
+        local size = vehicles:size()
+        if type(size) ~= "number" or size <= 0 then return end
+        for v = 0, size - 1 do
+            local vehicle = nil
+            pcall(function() vehicle = vehicles:get(v) end)
             if vehicle then
                 for i = 1, #group do
                     local piece = group[i]
@@ -594,6 +559,8 @@ end
 -- Watch registered gates for open/close transitions from ANY source
 -- (mod hotkey, vanilla E interact, other mods). Arms auto-close when a
 -- gate becomes open and no timer is already running; disarms when closed.
+-- Also re-arms if the gate is open with no timer (missed the rising edge,
+-- e.g. chunk load while already open, or a prior failed auto-close).
 function SAHGSystem:watchManualOpens()
     local secs = tonumber(AHG.opt("AutoCloseSeconds")) or 0
     if secs <= 0 then return end
@@ -608,15 +575,22 @@ function SAHGSystem:watchManualOpens()
             if gateObj then
                 local isOpen = AHG.isGroupOpen(AHG.getGateGroup(gateObj))
                 local wasOpen = self.openWatch[record.gateId] == true
+                local hasTimer = self.autoClose[record.gateId] ~= nil
 
                 if isOpen and not wasOpen then
-                    if not self.autoClose[record.gateId] then
+                    if not hasTimer then
                         self:armAutoClose(record)
                         AHG.noise("auto-close armed from open-watch (manual/E/other) gateId="
                             .. tostring(record.gateId))
                     end
+                elseif isOpen and wasOpen and not hasTimer then
+                    -- Missed rising edge or a previous close attempt cleared the
+                    -- timer while the gate stayed open - keep trying.
+                    self:armAutoClose(record)
+                    AHG.noise("auto-close re-armed; open with no timer gateId="
+                        .. tostring(record.gateId))
                 elseif (not isOpen) and wasOpen then
-                    if self.autoClose[record.gateId] then
+                    if hasTimer then
                         self:disarmAutoClose(record.gateId)
                         AHG.noise("auto-close disarmed; gate closed externally gateId="
                             .. tostring(record.gateId))
@@ -655,7 +629,11 @@ function SAHGSystem:processAutoClose()
                         self.autoClose[gateId] = now + AUTOCLOSE_RETRY_MS
                         AHG.noise("auto-close postponed (blocked) gateId=" .. tostring(gateId))
                     else
-                        if self:toggleGroup(group, nil, false) > 0 then
+                        -- GateMotor/HydeCo/ASG always pass a living player into
+                        -- ToggleDoor. Auto-close has no triggering player, so
+                        -- borrow the nearest online one (or any alive player).
+                        local actor = AHG.findActorForToggle(record.x, record.y, record.z, nil)
+                        if self:toggleGroup(group, actor, false) > 0 then
                             self:finishClose(record, group, gateObj)
                             if self.openWatch then self.openWatch[gateId] = false end
                             AHG.noise("auto-closed gateId=" .. tostring(gateId))

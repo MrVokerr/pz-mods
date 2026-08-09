@@ -1,0 +1,45 @@
+---
+description: Always use Workshop gate mods as reference for AHG door/gate toggle behavior
+alwaysApply: true
+---
+
+# Gate mod reference (AHG)
+
+When changing Automatic / Hotkey Gates (`auto-gate/`), **check these working B42 Workshop mods first** before inventing new toggle/sync/auto-close logic. Prefer their patterns over novel AHG-only approaches.
+
+## Reference mods (Steam Workshop)
+
+| Workshop ID | Mod | Local path (after steamcmd download) |
+|-------------|-----|--------------------------------------|
+| `3722192974` | Auto Gate Motor | `F:/Games/steamcmd/steamapps/workshop/content/108600/3722192974/` |
+| `3594285774` | HydeCo Automatic Garage Doors + Gates | `F:/Games/steamcmd/steamapps/workshop/content/108600/3594285774/` |
+| `3777510303` | Automatic Door Controller / Sensor Gate | `F:/Games/steamcmd/steamapps/workshop/content/108600/3777510303/` |
+| `3629503450` | Remote Gate Opener (SP) | `F:/Games/steamcmd/steamapps/workshop/content/108600/3629503450/` |
+
+If a folder is missing: `steamcmd +login anonymous +workshop_download_item 108600 <id> +quit` (steamcmd at `F:/Games/steamcmd/steamcmd.exe`).
+
+## Patterns to copy
+
+- **One `ToggleDoor(player)`** on a **canonical** handle (double-door index 1 when available). Vanilla syncs the rest of the group.
+- Always pass a **living IsoPlayer** into `ToggleDoor` (auto-close: borrow nearest online player). Do not call `toggleGroup(..., nil)`.
+- Sync locks/modData with `syncIsoObject` / `transmitModData` — **not** `transmitUpdatedSpriteToClients` after a successful `ToggleDoor`.
+- Do **not** second-pass every leftover leaf with `ToggleDoorSilent` — that desyncs multi-tile assemblies (HydeCo warning).
+
+## Anti-patterns (do not reintroduce)
+
+```lua
+-- BAD: poke every leaf
+for _, piece in ipairs(group) do piece:ToggleDoorSilent() end
+
+-- BAD: hard-refuse whole gate because one leaf's getSprite() is nil
+if not getSprite(piece) then return "GateCorrupted" end
+
+-- BAD: force sprite transmit after ToggleDoor
+piece:transmitUpdatedSpriteToClients()
+```
+
+```lua
+-- GOOD: GateMotor / HydeCo style
+local handle = AHG.getCanonicalGateHandle(group)
+handle:ToggleDoor(actor)  -- actor = triggering player or AHG.findActorForToggle(...)
+```

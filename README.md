@@ -3,7 +3,7 @@
 
 Project Zomboid **Build 42.20+** mod for dedicated multiplayer servers (works in singleplayer / Host too). Staff designate vehicle gates as automatic; players near a registered gate open or close it key-fob style — including from inside a vehicle — via hotkey, vehicle radial menu, or right-click.
 
-Gate toggles run **server-side**; clients send intents only.
+Gate toggles run **server-side**; clients send intents only. Toggle/auto-close behavior is aligned with proven B42 Workshop gate mods (GateMotor, HydeCo, AutomaticSensorGate) — see [`.cursor/rules/gate-mod-references.mdc`](.cursor/rules/gate-mod-references.mdc).
 
 | | |
 |---|---|
@@ -17,7 +17,7 @@ Gate toggles run **server-side**; clients send intents only.
 - **Designated gates only** — staff register multi-tile vehicle gates / garage doors (sandbox can allow any door)
 - **Three triggers** — rebindable hotkey (default **G**), vehicle radial “Operate Gate”, right-click on the gate
 - **Lock bypass** — fob opens locked gates; lock state is remembered and restored on close
-- **Auto-close** — closes after N seconds after **any** open (hotkey, radial, context, or vanilla **E**), with a safety check so it won’t close on a player/vehicle
+- **Auto-close** — closes after N seconds after **any** open (hotkey, radial, context, or vanilla **E**); manual close before the timer cancels auto-close
 - **Faction tags** — optional ACL at registration / **Change Tag...**: empty = public, one faction, or comma-separated list; Admin/Moderator bypass
 - **Staff tools** — Moderator+ (default) can register, change tags, and unregister
 - **Full sandbox page** — range, cooldown, locks, auto-close, staff level, interface toggles, debug logging
@@ -92,12 +92,19 @@ Solo sandbox always allows. Logic lives in [`AHG_Permissions.lua`](auto-gate/mod
 3. Sit in a car → radial **Operate Gate** works.
 4. Lock the gate → fob still opens; close → lock restored (with defaults).
 5. Open with vanilla **E** → auto-closes after ~10s (if delay > 0).
-6. Stand in the gateway during auto-close → delayed until clear.
-7. Out of range → “No automatic gate in range”.
-8. Non-staff cannot register / change tags (MP).
-9. Tagged gate denies wrong faction; Admin/Mod still operate.
+6. Open with **E**, then close with **E** before the timer → auto-close is cancelled; gate stays closed.
+7. Stand in the gateway during auto-close → delayed until clear.
+8. Out of range → “No automatic gate in range”.
+9. Non-staff cannot register / change tags (MP).
+10. Tagged gate denies wrong faction; Admin/Mod still operate.
 
-For failures: enable **Debug Logging**, reproduce once, search `C:\Users\Voker\Zomboid\console.txt` for `[AHG]` and `ERROR`.
+For failures: enable **Debug Logging**, reproduce once, search `%USERPROFILE%\Zomboid\console.txt` (and `DebugLog-server.txt` on dedicated) for `[AHG]` and `ERROR`.
+
+## Architecture notes
+
+- **Canonical `ToggleDoor`**: one call on a preferred double-door handle (index 1); vanilla syncs partner panels. Do not silent-toggle every leaf.
+- **Auto-close actor**: always pass a living player into `ToggleDoor` (borrow nearest online player when the timer fires with no triggerer).
+- **Reference mods** (always consult before changing toggle/sync): Workshop `3722192974` (GateMotor), `3594285774` (HydeCo), `3777510303` (AutomaticSensorGate), `3629503450` (Remote Gate Opener).
 
 ## Mod layout
 
@@ -115,27 +122,28 @@ auto-gate/mods/AutoHotkeyGates/
         client/AutoHotkeyGates/   context, hotkey, radial, client GlobalObject mirror
         server/AutoHotkeyGates/   system, commands, permissions, GlobalObjects
         shared/Translate/EN/      ContextMenu, IG_UI, UI, Sandbox
+.cursor/rules/gate-mod-references.mdc   agent rule: keep Workshop mods as toggle reference
 ```
 
 ## Known limitations
 
-- A gate piece that vanilla leaves with **no sprite assigned** (seen on a corrupted multi-tile door assembly) can't be operated remotely — the mod detects this up front and shows *"This gate is damaged and can't be operated remotely"* instead of desyncing. Rebuild/replace the affected tile(s); the mod cannot repair vanilla's corrupted object data from Lua.
+- Gates desynced by an older AHG build (multi-leaf silent toggles / forced sprite transmits) may need one vanilla hand open/close or a rebuild to look right again.
 
 ## Changelog
 
 ### 1.0.1
 
 - Safe double-door / garage group detection (fixes B42 `ArrayIndexOutOfBounds` spam on normal doors)
-- Remote toggle sync: `ToggleDoor` first, silent fallback + `sync` / `transmitUpdatedSpriteToClients` (with a `transmitCompleteItemToClients` fallback when the sprite sync itself fails)
-- Auto-close arms on **any** open (hotkey or vanilla **E**)
+- Toggle path aligned with GateMotor / HydeCo / AutomaticSensorGate: one `ToggleDoor` on a canonical handle; silent fallback only on that same handle; no per-leaf second pass; no forced `transmitUpdatedSpriteToClients` after toggle
+- Auto-close arms on **any** open (hotkey or vanilla **E**); manual close before the timer disarms it; timer re-arms if a gate is open with no timer
+- Auto-close borrows a nearby living player for `ToggleDoor` (was passing `nil`)
 - Staff **Change Tag...** on registered gates; default staff level Moderator+
 - Defaults: trigger range **7**, auto-close **10s**
-- Hardened timestamps, client/server command dispatch, vehicle radial wrap
+- Hardened timestamps (`getTimestampMs` / `getTimestamp` / `getTimeInMillis`), client/server command dispatch, vehicle radial wrap
 - Hotkey feedback text distinguishes garage doors from regular gates
-- `AHG_VanillaSafety.lua`: defensively patches vanilla's `buildUtil.getDoubleDoorObjects` / `getGarageDoorObjects` so a broken multi-tile door assembly (>4 linked pieces) can't abort a sledgehammer destroy action or spam the destroy-cursor render loop; loads on dedicated servers too (guarded against `require` itself failing there)
-- Destroying a registered/tagged gate now reliably clears its AHG registration and tag data — the removal check no longer mistakes an unrelated or corrupted leftover object on the same tile for the original gate
-- Detects gate pieces with no sprite assigned (corrupted door data) and refuses to operate them remotely with a clear message, instead of silently desyncing client/server open state (which looked like the hotkey "flickering" the gate open then instantly shut)
-- Hotkey debounce rewritten as a shared, edge-triggered down/up state machine instead of a per-listener time debounce
+- Hotkey debounce rewritten as a shared, edge-triggered down/up state machine
+- `AHG_VanillaSafety.lua`: patches vanilla `buildUtil.getDoubleDoorObjects` / `getGarageDoorObjects` so broken assemblies (>4 linked pieces) cannot abort destroy or spam the destroy cursor; guarded when `require` fails on dedicated servers
+- Destroying a registered/tagged gate clears AHG registration/tag data (strict marker match, not “any door on the square”)
 
 ### 1.0.0
 

@@ -187,20 +187,6 @@ function AHG.findDoorLikeFromWorldObjects(worldobjects)
     return found
 end
 
--- Some door/gate pieces end up with no sprite assigned server-side (seen on
--- a corrupted multi-tile assembly: vanilla IsoThumpable.ToggleDoorActual and
--- IsoObject.transmitUpdatedSpriteToClients both throw a NullPointerException
--- reading getSprite().*). Toggling such a piece flips its logical open/closed
--- state while the visual sync silently fails, so the client never sees the
--- change - a hotkey press then looks like nothing happened, and a follow-up
--- press toggles it right back, i.e. the classic open-then-instant-close
--- flicker. Detect this up front and refuse to touch the piece at all.
-function AHG.isSpriteValid(obj)
-    if not obj then return false end
-    local ok, spr = pcall(function() return obj:getSprite() end)
-    return ok and spr ~= nil
-end
-
 function AHG.isOpen(obj)
     if not obj then return false end
     local isOpen = false
@@ -284,6 +270,81 @@ function AHG.getGateGroup(obj)
     end
 
     return result
+end
+
+-- Pick the single handle that should receive ToggleDoor.
+-- HydeCo / GateMotor: operate ONE canonical piece. Toggling every leaf of a
+-- 4-panel double door independently desyncs the assembly (and can leave
+-- secondary pieces with a null sprite). Prefer double-door index 1 when
+-- vanilla exposes it; otherwise the first piece that has ToggleDoor.
+function AHG.getCanonicalGateHandle(groupOrObj)
+    local group = groupOrObj
+    if groupOrObj and AHG.isDoorLike(groupOrObj) and not groupOrObj[1] then
+        group = AHG.getGateGroup(groupOrObj)
+    end
+    if not group or #group == 0 then return nil end
+
+    if IsoDoor and IsoDoor.getDoubleDoorObject then
+        for i = 1, #group do
+            local seed = group[i]
+            if seed and AHG.getDoubleDoorIndexSafe(seed) ~= -1 then
+                local dd1 = nil
+                pcall(function() dd1 = IsoDoor.getDoubleDoorObject(seed, 1) end)
+                if AHG.isDoorLike(dd1) and dd1.ToggleDoor then return dd1 end
+            end
+        end
+    end
+
+    for i = 1, #group do
+        local piece = group[i]
+        if AHG.isDoorLike(piece) and piece.ToggleDoor then return piece end
+    end
+    return group[1]
+end
+
+-- ToggleDoor wants a living IsoPlayer (GateMotor / HydeCo / ASG all pass one).
+-- Auto-close has no triggering player, so pick any nearby online player, else
+-- any alive player, else nil (caller may still try ToggleDoor(nil)).
+function AHG.findActorForToggle(x, y, z, preferPlayer)
+    if preferPlayer and not preferPlayer:isDead() then return preferPlayer end
+
+    local best, bestD2 = nil, nil
+    local rangeSq = 64 * 64
+
+    local function consider(player)
+        if not player or player:isDead() then return end
+        if x == nil or y == nil then
+            if not best then best = player end
+            return
+        end
+        local d2 = AHG.distSq(player:getX(), player:getY(), player:getZ(), x, y, z)
+        if d2 > rangeSq then return end
+        if not bestD2 or d2 < bestD2 then
+            best, bestD2 = player, d2
+        end
+    end
+
+    if isServer() then
+        local online = getOnlinePlayers and getOnlinePlayers() or nil
+        if online then
+            for i = 0, online:size() - 1 do
+                consider(online:get(i))
+            end
+        end
+    end
+
+    if not best then
+        local n = (getNumActivePlayers and getNumActivePlayers()) or 1
+        for i = 0, n - 1 do
+            consider(getSpecificPlayer(i))
+        end
+    end
+
+    if not best then
+        consider(getPlayer and getPlayer() or nil)
+    end
+
+    return best
 end
 
 -- A "vehicle gate" is any door assembly spanning more than one tile:
@@ -475,9 +536,11 @@ function AHG.setPieceLocks(obj, key, iso, pad)
     pcall(function() if obj.setLockedByPadlock then obj:setLockedByPadlock(pad) end end)
 end
 
--- Sync lock / open-state / sprite to clients after a remote toggle.
--- B42: ToggleDoor usually networks itself; ToggleDoorSilent does not, so we
--- must push sprite + iso state when the silent path was used.
+-- Sync lock / mod-data after our own lock edits. Do NOT call
+-- transmitUpdatedSpriteToClients after ToggleDoor - vanilla ToggleDoor
+-- already networks open state (GateMotor / HydeCo / ASG all rely on that).
+-- Forcing a sprite transmit on mid-toggle / secondary pieces is what left
+-- assemblies with null sprites and permanently broke remote operate.
 function AHG.syncPiece(obj)
     if not obj then return end
     pcall(function()
@@ -487,32 +550,29 @@ function AHG.syncPiece(obj)
         if obj.syncIsoObject then
             obj:syncIsoObject(false, 0, nil, nil)
         end
-        if isServer() then
-            -- transmitUpdatedSpriteToClients() throws server-side if the
-            -- object's current sprite is nil (corrupted piece). Skip it in
-            -- that case and fall back to a full resync so the client still
-            -- gets something instead of a silently-swallowed exception and
-            -- a permanently stale view of the object.
-            local synced = false
-            if AHG.isSpriteValid(obj) and obj.transmitUpdatedSpriteToClients then
-                synced = pcall(function() obj:transmitUpdatedSpriteToClients() end)
-            end
-            if not synced and obj.transmitCompleteItemToClients then
-                pcall(function() obj:transmitCompleteItemToClients() end)
-            end
+        if obj.syncIsoThumpable then
+            obj:syncIsoThumpable()
+        end
+        if isServer() and obj.transmitModData then
+            obj:transmitModData()
         end
     end)
 end
 
--- Timestamp helper (B42+). Falls back to wall-clock ms via getTimeInMillis.
+-- Timestamp helper (B42+). Falls back to getTimestamp()*1000, then getTimeInMillis.
 function AHG.nowMs()
     if getTimestampMs then
         local ok, t = pcall(getTimestampMs)
-        if ok and t then return t end
+        if ok and type(t) == "number" and t > 0 then return t end
+    end
+    -- ASG / many B42 server paths expose getTimestamp() in whole seconds.
+    if getTimestamp then
+        local ok, t = pcall(getTimestamp)
+        if ok and type(t) == "number" and t > 0 then return t * 1000 end
     end
     if getTimeInMillis then
         local ok, t = pcall(getTimeInMillis)
-        if ok and t then return t end
+        if ok and type(t) == "number" and t > 0 then return t end
     end
     return 0
 end
