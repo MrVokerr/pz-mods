@@ -3,7 +3,7 @@
 
 Project Zomboid **Build 42.20+** mod for dedicated multiplayer servers (works in singleplayer / Host too). Staff designate vehicle gates as automatic; players near a registered gate open or close it key-fob style — including from inside a vehicle — via hotkey, vehicle radial menu, or right-click.
 
-Gate toggles run **server-side**; clients send intents only. Toggle/auto-close behavior is aligned with proven B42 Workshop gate mods (GateMotor, HydeCo, AutomaticSensorGate) — see [`.cursor/rules/gate-mod-references.mdc`](.cursor/rules/gate-mod-references.mdc).
+Gate toggles run **server-side**; clients send intents only.
 
 | | |
 |---|---|
@@ -11,29 +11,6 @@ Gate toggles run **server-side**; clients send intents only. Toggle/auto-close b
 | **Version** | `1.0.1` |
 | **Path** | [`auto-gate/mods/AutoHotkeyGates/`](auto-gate/mods/AutoHotkeyGates/) |
 | **Target** | Build **42.20+** (`versionMin=42.20`) |
-
-## Quick Start
-
-1. Clone / open this repo.
-2. Junction the mod into your user mods folder (one-time; no copy step after that):
-
-```powershell
-cmd /c mklink /J "%USERPROFILE%\Zomboid\mods\AutoHotkeyGates" "F:\Projects\pz-mods\auto-gate\mods\AutoHotkeyGates"
-```
-
-3. In PZ: **Mods** → enable **Automatic / Hotkey Gates** (`AutoHotkeyGates`).
-4. Load a world, **Host**, or join a server that has the mod.
-5. Tune **Sandbox → Automatic Hotkey Gates**, then as staff register a gate and press **G** (default).
-
-## Commands
-
-| Command | Description |
-|---------|-------------|
-| `mklink /J "%USERPROFILE%\Zomboid\mods\AutoHotkeyGates" "<repo>\auto-gate\mods\AutoHotkeyGates"` | Junction repo source into the user mods folder |
-| `setaccesslevel "Username" admin` | Grant admin from the **server console** (no leading `/`) |
-| `/setaccesslevel "Username" admin` | Same from in-game chat when already staff/host |
-
-No build step — edit Lua in the repo; restart the game/world to reload scripts.
 
 ## Features
 
@@ -61,30 +38,16 @@ auto-gate/mods/AutoHotkeyGates/
         client/AutoHotkeyGates/   context, hotkey, radial, client GlobalObject mirror
         server/AutoHotkeyGates/   system, commands, permissions, GlobalObjects
         shared/Translate/EN/      ContextMenu, IG_UI, UI, Sandbox
-.cursor/rules/gate-mod-references.mdc   agent rule: keep Workshop mods as toggle reference
 ```
 
 ## Prerequisites
 
 - Project Zomboid **Build 42.20+**
-- Windows junction (or copy) into `%USERPROFILE%\Zomboid\mods\` for local Host / SP testing
-- For dedicated: same mod files on the server, plus `Mods=AutoHotkeyGates` in the server ini
+- Mod installed under the game’s mods path (Host / SP or dedicated)
+- For dedicated: `Mods=AutoHotkeyGates` in the server ini
 - Staff access (**Moderator+** by default) to register gates in MP
 
 ## Configuration
-
-### Local testing (Host / SP)
-
-Source lives in this repo. Junction it into your user mods folder so the game sees it directly:
-
-```
-F:\Projects\pz-mods\auto-gate\mods\AutoHotkeyGates
-  →  %USERPROFILE%\Zomboid\mods\AutoHotkeyGates   (mklink /J)
-```
-
-1. Enable **`AutoHotkeyGates`** in the mod menu (alongside Workshop mods — PZ merges both).
-2. Load a world or join / Host a server.
-3. Tune **Sandbox → Automatic Hotkey Gates**.
 
 ### Dedicated server
 
@@ -112,7 +75,7 @@ F:\Projects\pz-mods\auto-gate\mods\AutoHotkeyGates
 
 Sandbox options are read live via `SandboxVars` where PZ allows (F1 admin sandbox edits). File-only dedicated edits may need a vanilla options reload or restart. **Existing saves keep old sandbox values** until you change them in that world.
 
-## Quick start (in-game)
+## In-game usage
 
 1. As staff (**Moderator+** by default), right-click a large vehicle gate → **Automatic Gate → Register Automatic Gate...**
 2. Leave the tag empty for public, type one faction (e.g. `Police`), or several comma-separated (`Police, Military`).
@@ -151,23 +114,12 @@ Solo sandbox always allows. Logic lives in [`AHG_Permissions.lua`](auto-gate/mod
 
 For failures: enable **Debug Logging**, reproduce once, search `%USERPROFILE%\Zomboid\console.txt` (and `DebugLog-server.txt` on dedicated) for `[AHG]` and `ERROR`.
 
-## Architecture
-
-- **Canonical `ToggleDoor`**: one call on a preferred double-door handle (index 1); vanilla syncs partner panels. Do not silent-toggle every leaf.
-- **Auto-close actor**: always pass a living player into `ToggleDoor` (borrow nearest online player when the timer fires with no triggerer).
-- **Reference mods** (always consult before changing toggle/sync): Workshop `3722192974` (GateMotor), `3594285774` (HydeCo), `3777510303` (AutomaticSensorGate), `3629503450` (Remote Gate Opener).
-- Sync locks/modData with `syncIsoObject` / `transmitModData` — not `transmitUpdatedSpriteToClients` after a successful `ToggleDoor`.
-
-## Known limitations
-
-- Gates desynced by an older AHG build (multi-leaf silent toggles / forced sprite transmits) may need one vanilla hand open/close or a rebuild to look right again.
-
 ## Changelog
 
 ### 1.0.1
 
 - Safe double-door / garage group detection (fixes B42 `ArrayIndexOutOfBounds` spam on normal doors)
-- Toggle path aligned with GateMotor / HydeCo / AutomaticSensorGate: one `ToggleDoor` on a canonical handle; silent fallback only on that same handle; no per-leaf second pass; no forced `transmitUpdatedSpriteToClients` after toggle
+- Toggle path: one `ToggleDoor` on a canonical handle; silent fallback only on that same handle; no per-leaf second pass; no forced sprite transmit after toggle
 - Auto-close arms on **any** open (hotkey or vanilla **E**); manual close before the timer disarms it; timer re-arms if a gate is open with no timer
 - Auto-close borrows a nearby living player for `ToggleDoor` (was passing `nil`)
 - Staff **Change Tag...** on registered gates; default staff level Moderator+
