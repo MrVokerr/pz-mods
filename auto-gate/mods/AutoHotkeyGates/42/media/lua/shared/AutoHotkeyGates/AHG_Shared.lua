@@ -187,6 +187,20 @@ function AHG.findDoorLikeFromWorldObjects(worldobjects)
     return found
 end
 
+-- Some door/gate pieces end up with no sprite assigned server-side (seen on
+-- a corrupted multi-tile assembly: vanilla IsoThumpable.ToggleDoorActual and
+-- IsoObject.transmitUpdatedSpriteToClients both throw a NullPointerException
+-- reading getSprite().*). Toggling such a piece flips its logical open/closed
+-- state while the visual sync silently fails, so the client never sees the
+-- change - a hotkey press then looks like nothing happened, and a follow-up
+-- press toggles it right back, i.e. the classic open-then-instant-close
+-- flicker. Detect this up front and refuse to touch the piece at all.
+function AHG.isSpriteValid(obj)
+    if not obj then return false end
+    local ok, spr = pcall(function() return obj:getSprite() end)
+    return ok and spr ~= nil
+end
+
 function AHG.isOpen(obj)
     if not obj then return false end
     local isOpen = false
@@ -279,6 +293,16 @@ function AHG.isVehicleGate(obj)
     if AHG.getGarageDoorIndexSafe(obj) ~= -1 then return true end
     if AHG.getDoubleDoorIndexSafe(obj) ~= -1 then return true end
     return #AHG.getGateGroup(obj) >= 2
+end
+
+-- True if any piece of the group is part of a garage door assembly, so
+-- feedback text can say "garage door" instead of the generic "gate".
+function AHG.isGarageGroup(group)
+    if not group then return false end
+    for i = 1, #group do
+        if AHG.getGarageDoorIndexSafe(group[i]) ~= -1 then return true end
+    end
+    return false
 end
 
 function AHG.isEligibleGate(obj)
@@ -463,8 +487,19 @@ function AHG.syncPiece(obj)
         if obj.syncIsoObject then
             obj:syncIsoObject(false, 0, nil, nil)
         end
-        if isServer() and obj.transmitUpdatedSpriteToClients then
-            obj:transmitUpdatedSpriteToClients()
+        if isServer() then
+            -- transmitUpdatedSpriteToClients() throws server-side if the
+            -- object's current sprite is nil (corrupted piece). Skip it in
+            -- that case and fall back to a full resync so the client still
+            -- gets something instead of a silently-swallowed exception and
+            -- a permanently stale view of the object.
+            local synced = false
+            if AHG.isSpriteValid(obj) and obj.transmitUpdatedSpriteToClients then
+                synced = pcall(function() obj:transmitUpdatedSpriteToClients() end)
+            end
+            if not synced and obj.transmitCompleteItemToClients then
+                pcall(function() obj:transmitCompleteItemToClients() end)
+            end
         end
     end)
 end

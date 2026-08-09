@@ -304,6 +304,12 @@ end
 -- a second pass catches leftover pieces on non-synced assemblies.
 function SAHGSystem:togglePiece(piece, playerObj)
     if not piece then return false end
+    if not AHG.isSpriteValid(piece) then
+        -- operateGate already refuses whole-group operations on a corrupted
+        -- piece; this is a backstop for other callers (auto-close retries).
+        AHG.noise("togglePiece skipped: no sprite (corrupted) @ " .. tostring(piece:getX()) .. "," .. tostring(piece:getY()))
+        return false
+    end
     local before = AHG.isOpen(piece)
     local usedSilent = false
 
@@ -491,12 +497,23 @@ function SAHGSystem:operateGate(playerObj, record)
     end
 
     local group = AHG.getGateGroup(gateObj)
+
+    for i = 1, #group do
+        if not AHG.isSpriteValid(group[i]) then
+            AHG.noise("operateGate refused: corrupted piece (no sprite) gateId=" .. tostring(record.gateId)
+                .. " @ " .. tostring(group[i]:getX()) .. "," .. tostring(group[i]:getY()))
+            return false, "IGUI_AHG_GateCorrupted"
+        end
+    end
+
     local wantOpen = not AHG.isGroupOpen(group)
+    local isGarage = AHG.isGarageGroup(group)
 
     if wantOpen then
         local ok, err = self:tryOpenGroup(record, group, playerObj)
         if not ok then return false, err end
         self:finishOpen(record, group, gateObj)
+        if isGarage then return true, "IGUI_AHG_GarageDoorOpened" end
         return true, "IGUI_AHG_GateOpened"
     else
         local changed = self:toggleGroup(group, playerObj, false)
@@ -505,6 +522,7 @@ function SAHGSystem:operateGate(playerObj, record)
             local freshObj, freshGroup = self:refreshGateGroup(record, group)
             if freshObj then
                 gateObj, group = freshObj, freshGroup
+                isGarage = AHG.isGarageGroup(group)
                 changed = self:toggleGroup(group, playerObj, false)
             end
         end
@@ -512,6 +530,7 @@ function SAHGSystem:operateGate(playerObj, record)
             return false, "IGUI_AHG_ToggleFailed"
         end
         self:finishClose(record, group, gateObj)
+        if isGarage then return true, "IGUI_AHG_GarageDoorClosed" end
         return true, "IGUI_AHG_GateClosed"
     end
 end
@@ -663,6 +682,24 @@ function SAHGSystem:scheduleRemovalCheck(gateId)
     self.pendingRemovalChecks[gateId] = REMOVAL_VERIFY_TICKS
 end
 
+-- Strict existence check for the removal-check flow: true only if a piece
+-- still carries THIS gate's own marker. Deliberately does not use
+-- resolveGateObject/AHG.findDoorLikeOnSquare - those fall back to "any
+-- door-like object on the anchor square" (useful for Trigger/Toggle, where
+-- being lenient about which exact piece moved is helpful), which would
+-- wrongly report the gate as "still there" if an unrelated door, or a
+-- leftover corrupted remnant of the destroyed gate, happens to occupy the
+-- same square. That false positive is what let a destroyed gate's tag/
+-- registration survive by re-marking whatever was left behind.
+function SAHGSystem:gateStillExists(record)
+    if not record or not record.gateId then return false end
+    local pieces = self:getMarkedObjectsForGate(record.gateId)
+    for i = 1, #pieces do
+        if AHG.isDoorLike(pieces[i]) then return true end
+    end
+    return false
+end
+
 function SAHGSystem:processPendingRemovalChecks()
     if not self.pendingRemovalChecks then return end
 
@@ -678,14 +715,14 @@ function SAHGSystem:processPendingRemovalChecks()
                 if not sq then
                     -- Chunk unavailable; never delete persistent data blindly.
                     AHG.noise("deferred cleanup skipped; square unavailable gateId=" .. tostring(gateId))
-                else
+                elseif self:gateStillExists(record) then
                     local gateObj = self:resolveGateObject(record)
-                    if AHG.isDoorLike(gateObj) then
+                    if gateObj then
                         self:markRelatedObjectsForGate(record, gateObj)
-                        AHG.noise("deferred cleanup preserved gateId=" .. tostring(gateId))
-                    else
-                        self:removeGateRecord(record, "gate object missing after deferred removal check")
                     end
+                    AHG.noise("deferred cleanup preserved gateId=" .. tostring(gateId))
+                else
+                    self:removeGateRecord(record, "gate object missing after deferred removal check")
                 end
             end
         end

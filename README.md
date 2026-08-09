@@ -1,3 +1,4 @@
+<!-- update:auto:start -->
 # Automatic / Hotkey Gates
 
 Project Zomboid **Build 42.20+** mod for dedicated multiplayer servers (works in singleplayer / Host too). Staff designate vehicle gates as automatic; players near a registered gate open or close it key-fob style — including from inside a vehicle — via hotkey, vehicle radial menu, or right-click.
@@ -23,11 +24,11 @@ Gate toggles run **server-side**; clients send intents only.
 
 ## Install (local testing)
 
-Source lives in this repo. Junction it into your user mods folder so the game sees it:
+Source lives in this repo. Junction it into your user mods folder so the game sees it directly (no copy step, no rebuild-and-restart-to-sync):
 
 ```
-D:\Git\pz-mods\auto-gate\mods\AutoHotkeyGates
-  →  %USERPROFILE%\Zomboid\mods\AutoHotkeyGates
+F:\Projects\pz-mods\auto-gate\mods\AutoHotkeyGates
+  →  %USERPROFILE%\Zomboid\mods\AutoHotkeyGates   (mklink /J)
 ```
 
 1. Enable **`AutoHotkeyGates`** in the mod menu (alongside Workshop mods — PZ merges both).
@@ -110,22 +111,31 @@ auto-gate/mods/AutoHotkeyGates/
       sandbox-options.txt
       AnimSets/ actiongroups/     empty stubs (silences B42 missing-folder noise)
       lua/
-        shared/AutoHotkeyGates/   AHG_Shared.lua, AHG_Keybind.lua
+        shared/AutoHotkeyGates/   AHG_Shared.lua, AHG_Keybind.lua, AHG_VanillaSafety.lua
         client/AutoHotkeyGates/   context, hotkey, radial, client GlobalObject mirror
         server/AutoHotkeyGates/   system, commands, permissions, GlobalObjects
         shared/Translate/EN/      ContextMenu, IG_UI, UI, Sandbox
 ```
+
+## Known limitations
+
+- A gate piece that vanilla leaves with **no sprite assigned** (seen on a corrupted multi-tile door assembly) can't be operated remotely — the mod detects this up front and shows *"This gate is damaged and can't be operated remotely"* instead of desyncing. Rebuild/replace the affected tile(s); the mod cannot repair vanilla's corrupted object data from Lua.
 
 ## Changelog
 
 ### 1.0.1
 
 - Safe double-door / garage group detection (fixes B42 `ArrayIndexOutOfBounds` spam on normal doors)
-- Remote toggle sync: `ToggleDoor` first, silent fallback + `sync` / `transmitUpdatedSpriteToClients`
+- Remote toggle sync: `ToggleDoor` first, silent fallback + `sync` / `transmitUpdatedSpriteToClients` (with a `transmitCompleteItemToClients` fallback when the sprite sync itself fails)
 - Auto-close arms on **any** open (hotkey or vanilla **E**)
 - Staff **Change Tag...** on registered gates; default staff level Moderator+
 - Defaults: trigger range **7**, auto-close **10s**
 - Hardened timestamps, client/server command dispatch, vehicle radial wrap
+- Hotkey feedback text distinguishes garage doors from regular gates
+- `AHG_VanillaSafety.lua`: defensively patches vanilla's `buildUtil.getDoubleDoorObjects` / `getGarageDoorObjects` so a broken multi-tile door assembly (>4 linked pieces) can't abort a sledgehammer destroy action or spam the destroy-cursor render loop; loads on dedicated servers too (guarded against `require` itself failing there)
+- Destroying a registered/tagged gate now reliably clears its AHG registration and tag data — the removal check no longer mistakes an unrelated or corrupted leftover object on the same tile for the original gate
+- Detects gate pieces with no sprite assigned (corrupted door data) and refuses to operate them remotely with a clear message, instead of silently desyncing client/server open state (which looked like the hotkey "flickering" the gate open then instantly shut)
+- Hotkey debounce rewritten as a shared, edge-triggered down/up state machine instead of a per-listener time debounce
 
 ### 1.0.0
 
@@ -134,3 +144,4 @@ auto-gate/mods/AutoHotkeyGates/
 ## License
 
 Not specified yet. Add a `LICENSE` before public release if you care about reuse terms.
+<!-- update:auto:end -->
