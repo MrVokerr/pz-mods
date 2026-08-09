@@ -17,9 +17,9 @@ Gate toggles run **server-side**; clients send intents only.
 - **Three triggers** — rebindable hotkey (default **G**), vehicle radial “Operate Gate”, right-click on the gate
 - **Lock bypass** — fob opens locked gates; lock state is remembered and restored on close
 - **Auto-close** — closes after N seconds after **any** open (hotkey, radial, context, or vanilla **E**); manual close before the timer cancels auto-close
-- **Faction tags** — optional ACL at registration / **Change Tag...**: empty = public, one faction, or comma-separated list; Admin/Moderator bypass
+- **Faction tags** — optional ACL at registration / **Change Tag...**: empty = public, one faction, or comma-separated list; Admin/Moderator bypass; sandbox **Permission Provider** chooses Vanilla MP factions or **PLZ_Membership**
 - **Staff tools** — Moderator+ (default) can register, change tags, and unregister
-- **Full sandbox page** — range, cooldown, locks, auto-close, staff level, interface toggles, debug logging
+- **Full sandbox page** — range, cooldown, locks, auto-close, staff level, permission provider, interface toggles, debug logging
 
 ## Directory overview
 
@@ -68,6 +68,7 @@ AutoHotkeyGates/
 | Min Staff Level To Register | Moderator+ | Who can register / change tags / unregister |
 | Max Registered Gates | 0 (unlimited) | Cap |
 | Enforce Permission Hook | on | Master switch for faction-tag checks |
+| Permission Provider | Vanilla Faction Tag | Vanilla MP factions, or **PLZ_Membership** (PLZ_Factions + `USE_VEHICLE_GARAGE`) |
 | Enable Hotkey / Radial / Context | on | Per-trigger toggles |
 | Show Feedback Messages | on | Halo text |
 | Debug Logging | off | `[AHG]` lines in `console.txt` |
@@ -87,14 +88,20 @@ Sandbox options are read live via `SandboxVars` where PZ allows (F1 admin sandbo
 
 ## Faction permissions
 
-When **Enforce Permission Hook** is on:
+When **Enforce Permission Hook** is on, **Permission Provider** chooses the ACL:
+
+### Vanilla Faction Tag (default)
 
 | Gate tag | Who can operate |
 |----------|-----------------|
 | Empty | Anyone (public) |
-| One name (e.g. `Police`) | Members of that vanilla faction (trim + case-insensitive) |
+| One name (e.g. `Police`) | Members of that vanilla MP faction (trim + case-insensitive) |
 | Comma list (e.g. `Police, Military`) | Members of **any** listed faction |
 | Any tagged gate | **Admin** and **Moderator** always bypass |
+
+### PLZ_Membership
+
+Requires **PLZ_Factions** on the server. Same tag matching against the PLZ faction **name**, plus the player's role must have **`USE_VEHICLE_GARAGE`**. If this provider is selected but PLZ is missing, tagged triggers are denied (fail closed).
 
 Solo sandbox always allows. Logic lives in [`42/media/lua/server/AutoHotkeyGates/AHG_Permissions.lua`](42/media/lua/server/AutoHotkeyGates/AHG_Permissions.lua). Change access with **Change Tag...** (or unregister / re-register).
 
@@ -110,6 +117,7 @@ Solo sandbox always allows. Logic lives in [`42/media/lua/server/AutoHotkeyGates
 8. Out of range → “No automatic gate in range”.
 9. Non-staff cannot register / change tags (MP).
 10. Tagged gate denies wrong faction; Admin/Mod still operate.
+11. With **Permission Provider = PLZ_Membership**, matching PLZ faction + `USE_VEHICLE_GARAGE` can operate; missing PLZ denies tagged triggers.
 
 For failures: enable **Debug Logging**, reproduce once, search `%USERPROFILE%\Zomboid\console.txt` (and `DebugLog-server.txt` on dedicated) for `[AHG]` and `ERROR`.
 
@@ -117,6 +125,7 @@ For failures: enable **Debug Logging**, reproduce once, search `%USERPROFILE%\Zo
 
 ### 1.0.1
 
+- Sandbox **Permission Provider**: Vanilla Faction Tag (default) or **PLZ_Membership** (PLZ_Factions name match + `USE_VEHICLE_GARAGE`; fail closed if PLZ missing)
 - Safe double-door / garage group detection (fixes B42 `ArrayIndexOutOfBounds` spam on normal doors)
 - Toggle path: one `ToggleDoor` on a canonical handle; silent fallback only on that same handle; no per-leaf second pass; no forced sprite transmit after toggle
 - Auto-close arms on **any** open (hotkey or vanilla **E**); manual close before the timer disarms it; timer re-arms if a gate is open with no timer

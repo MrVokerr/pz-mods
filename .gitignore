@@ -54,3 +54,6 @@ __pycache__/
 *.xcf
 
 # Keep empty B42 stub dirs (AnimSets / actiongroups) via .keep files — do not ignore them
+
+# Local / reference mods (not tracked)
+PLZ_Factions/

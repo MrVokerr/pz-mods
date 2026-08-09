@@ -36,7 +36,12 @@
   "Sandbox_AHG_MaxRegisteredGates_tooltip": "Server-wide cap on the number of registered automatic gates. 0 means unlimited.",
 
   "Sandbox_AHG_EnforcePermissionHook": "Enforce Permission Hook",
-  "Sandbox_AHG_EnforcePermissionHook_tooltip": "When enabled, tagged gates require membership in one of the listed vanilla factions (comma-separated names). Empty tags stay public. Admin/Moderator always bypass. Disable to let anyone operate all registered gates.",
+  "Sandbox_AHG_EnforcePermissionHook_tooltip": "When enabled, tagged gates require faction authorization using the Permission Provider below. Empty tags stay public. Admin/Moderator always bypass. Disable to let anyone operate all registered gates.",
+
+  "Sandbox_AHG_PermissionProvider": "Permission Provider",
+  "Sandbox_AHG_PermissionProvider_tooltip": "Which faction system authorizes tagged gates when Enforce Permission Hook is on. Vanilla Faction Tag uses Project Zomboid MP factions. PLZ_Membership uses PLZ_Factions membership plus the USE_VEHICLE_GARAGE role permission (PLZ_Factions must be enabled). Gate tags still filter by faction name in both modes.",
+  "Sandbox_AHG_PermissionProviderMode_option1": "Vanilla Faction Tag",
+  "Sandbox_AHG_PermissionProviderMode_option2": "PLZ_Membership",
 
   "Sandbox_AHG_EnableHotkey": "Enable Hotkey",
   "Sandbox_AHG_EnableHotkey_tooltip": "Allow operating registered gates with the Operate Gate keybind.",

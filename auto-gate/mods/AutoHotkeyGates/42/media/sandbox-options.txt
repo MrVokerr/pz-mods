@@ -98,6 +98,16 @@ option AutoHotkeyGates.EnforcePermissionHook
     translation = AHG_EnforcePermissionHook,
 }
 
+option AutoHotkeyGates.PermissionProvider
+{
+    type = enum,
+    numValues = 2,
+    default = 1,
+    page = AHG,
+    translation = AHG_PermissionProvider,
+    valueTranslation = AHG_PermissionProviderMode,
+}
+
 option AutoHotkeyGates.EnableHotkey
 {
     type = boolean,

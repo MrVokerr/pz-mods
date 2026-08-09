@@ -1,7 +1,7 @@
 {
   "ContextMenu_AHG_Root": "Automatic Gate",
   "ContextMenu_AHG_Register": "Register Automatic Gate...",
-  "ContextMenu_AHG_RegisterTooltip": "Turn this gate into an automatic gate. Optional tag = vanilla faction name that may operate it (empty = public). Admin/Moderator always bypass.",
+  "ContextMenu_AHG_RegisterTooltip": "Turn this gate into an automatic gate. Optional tag = faction name that may operate it (empty = public; vanilla or PLZ depending on Permission Provider). Admin/Moderator always bypass.",
   "ContextMenu_AHG_RegisterNotEligible": "Only multi-tile vehicle gates and garage doors can be registered.",
   "ContextMenu_AHG_Unregister": "Unregister Automatic Gate",
   "ContextMenu_AHG_ChangeTag": "Change Tag...",

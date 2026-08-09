@@ -31,6 +31,7 @@ AHG.Defaults = {
     MinAccessLevelToRegister = 2,
     MaxRegisteredGates = 0,
     EnforcePermissionHook = true,
+    PermissionProvider = 1, -- 1 = VanillaFactionTag, 2 = PLZ_Membership
     EnableHotkey = true,
     EnableVehicleRadial = true,
     EnableContextMenu = true,
