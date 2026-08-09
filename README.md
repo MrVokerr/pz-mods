@@ -12,6 +12,29 @@ Gate toggles run **server-side**; clients send intents only. Toggle/auto-close b
 | **Path** | [`auto-gate/mods/AutoHotkeyGates/`](auto-gate/mods/AutoHotkeyGates/) |
 | **Target** | Build **42.20+** (`versionMin=42.20`) |
 
+## Quick Start
+
+1. Clone / open this repo.
+2. Junction the mod into your user mods folder (one-time; no copy step after that):
+
+```powershell
+cmd /c mklink /J "%USERPROFILE%\Zomboid\mods\AutoHotkeyGates" "F:\Projects\pz-mods\auto-gate\mods\AutoHotkeyGates"
+```
+
+3. In PZ: **Mods** → enable **Automatic / Hotkey Gates** (`AutoHotkeyGates`).
+4. Load a world, **Host**, or join a server that has the mod.
+5. Tune **Sandbox → Automatic Hotkey Gates**, then as staff register a gate and press **G** (default).
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `mklink /J "%USERPROFILE%\Zomboid\mods\AutoHotkeyGates" "<repo>\auto-gate\mods\AutoHotkeyGates"` | Junction repo source into the user mods folder |
+| `setaccesslevel "Username" admin` | Grant admin from the **server console** (no leading `/`) |
+| `/setaccesslevel "Username" admin` | Same from in-game chat when already staff/host |
+
+No build step — edit Lua in the repo; restart the game/world to reload scripts.
+
 ## Features
 
 - **Designated gates only** — staff register multi-tile vehicle gates / garage doors (sandbox can allow any door)
@@ -22,9 +45,37 @@ Gate toggles run **server-side**; clients send intents only. Toggle/auto-close b
 - **Staff tools** — Moderator+ (default) can register, change tags, and unregister
 - **Full sandbox page** — range, cooldown, locks, auto-close, staff level, interface toggles, debug logging
 
-## Install (local testing)
+## Directory overview
 
-Source lives in this repo. Junction it into your user mods folder so the game sees it directly (no copy step, no rebuild-and-restart-to-sync):
+```
+auto-gate/mods/AutoHotkeyGates/
+  mod.info
+  common/                         B42 common stub (+ empty AnimSets/actiongroups)
+  42/
+    mod.info                      versionMin=42.20, modversion=1.0.1
+    media/
+      sandbox-options.txt
+      AnimSets/ actiongroups/     empty stubs (silences B42 missing-folder noise)
+      lua/
+        shared/AutoHotkeyGates/   AHG_Shared.lua, AHG_Keybind.lua, AHG_VanillaSafety.lua
+        client/AutoHotkeyGates/   context, hotkey, radial, client GlobalObject mirror
+        server/AutoHotkeyGates/   system, commands, permissions, GlobalObjects
+        shared/Translate/EN/      ContextMenu, IG_UI, UI, Sandbox
+.cursor/rules/gate-mod-references.mdc   agent rule: keep Workshop mods as toggle reference
+```
+
+## Prerequisites
+
+- Project Zomboid **Build 42.20+**
+- Windows junction (or copy) into `%USERPROFILE%\Zomboid\mods\` for local Host / SP testing
+- For dedicated: same mod files on the server, plus `Mods=AutoHotkeyGates` in the server ini
+- Staff access (**Moderator+** by default) to register gates in MP
+
+## Configuration
+
+### Local testing (Host / SP)
+
+Source lives in this repo. Junction it into your user mods folder so the game sees it directly:
 
 ```
 F:\Projects\pz-mods\auto-gate\mods\AutoHotkeyGates
@@ -41,18 +92,7 @@ F:\Projects\pz-mods\auto-gate\mods\AutoHotkeyGates
 2. Add `AutoHotkeyGates` to `Mods=` in the server ini.
 3. Set sandbox options on the server (or via admin sandbox editor).
 
-## Quick start
-
-1. As staff (**Moderator+** by default), right-click a large vehicle gate → **Automatic Gate → Register Automatic Gate...**
-2. Leave the tag empty for public, type one faction (e.g. `Police`), or several comma-separated (`Police, Military`).
-3. Bind the key under **Options → Key Bindings → Automatic Hotkey Gates** (default **G**).
-4. Within range (default **7** tiles), on foot or in a vehicle:
-   - Press the hotkey
-   - Vehicle radial → **Operate Gate**
-   - Right-click the gate → **Open/Close Gate**
-5. Staff can later use **Change Tag...** or **Unregister Automatic Gate** on any registered gate.
-
-## Sandbox options
+### Sandbox options
 
 | Option | Default | Purpose |
 |--------|---------|---------|
@@ -71,6 +111,17 @@ F:\Projects\pz-mods\auto-gate\mods\AutoHotkeyGates
 | Debug Logging | off | `[AHG]` lines in `console.txt` |
 
 Sandbox options are read live via `SandboxVars` where PZ allows (F1 admin sandbox edits). File-only dedicated edits may need a vanilla options reload or restart. **Existing saves keep old sandbox values** until you change them in that world.
+
+## Quick start (in-game)
+
+1. As staff (**Moderator+** by default), right-click a large vehicle gate → **Automatic Gate → Register Automatic Gate...**
+2. Leave the tag empty for public, type one faction (e.g. `Police`), or several comma-separated (`Police, Military`).
+3. Bind the key under **Options → Key Bindings → Automatic Hotkey Gates** (default **G**).
+4. Within range (default **7** tiles), on foot or in a vehicle:
+   - Press the hotkey
+   - Vehicle radial → **Operate Gate**
+   - Right-click the gate → **Open/Close Gate**
+5. Staff can later use **Change Tag...** or **Unregister Automatic Gate** on any registered gate.
 
 ## Faction permissions
 
@@ -100,30 +151,12 @@ Solo sandbox always allows. Logic lives in [`AHG_Permissions.lua`](auto-gate/mod
 
 For failures: enable **Debug Logging**, reproduce once, search `%USERPROFILE%\Zomboid\console.txt` (and `DebugLog-server.txt` on dedicated) for `[AHG]` and `ERROR`.
 
-## Architecture notes
+## Architecture
 
 - **Canonical `ToggleDoor`**: one call on a preferred double-door handle (index 1); vanilla syncs partner panels. Do not silent-toggle every leaf.
 - **Auto-close actor**: always pass a living player into `ToggleDoor` (borrow nearest online player when the timer fires with no triggerer).
 - **Reference mods** (always consult before changing toggle/sync): Workshop `3722192974` (GateMotor), `3594285774` (HydeCo), `3777510303` (AutomaticSensorGate), `3629503450` (Remote Gate Opener).
-
-## Mod layout
-
-```
-auto-gate/mods/AutoHotkeyGates/
-  mod.info
-  common/                         B42 common stub (+ empty AnimSets/actiongroups)
-  42/
-    mod.info                      versionMin=42.20, modversion=1.0.1
-    media/
-      sandbox-options.txt
-      AnimSets/ actiongroups/     empty stubs (silences B42 missing-folder noise)
-      lua/
-        shared/AutoHotkeyGates/   AHG_Shared.lua, AHG_Keybind.lua, AHG_VanillaSafety.lua
-        client/AutoHotkeyGates/   context, hotkey, radial, client GlobalObject mirror
-        server/AutoHotkeyGates/   system, commands, permissions, GlobalObjects
-        shared/Translate/EN/      ContextMenu, IG_UI, UI, Sandbox
-.cursor/rules/gate-mod-references.mdc   agent rule: keep Workshop mods as toggle reference
-```
+- Sync locks/modData with `syncIsoObject` / `transmitModData` — not `transmitUpdatedSpriteToClients` after a successful `ToggleDoor`.
 
 ## Known limitations
 
